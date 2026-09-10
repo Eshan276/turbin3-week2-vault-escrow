@@ -1,0 +1,16 @@
+use anchor_lang::prelude::*;
+
+#[derive(InitSpace)]
+#[account]
+pub struct Escrow {
+    /// Lets one maker run several escrows at once — it is part of the PDA seeds.
+    pub seed: u64,
+    pub maker: Pubkey,
+    /// The mint the maker deposited.
+    pub mint_a: Pubkey,
+    /// The mint the maker wants back.
+    pub mint_b: Pubkey,
+    /// How much of mint_b the maker is asking for.
+    pub receive: u64,
+    pub bump: u8,
+}
