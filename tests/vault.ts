@@ -2,7 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Vault } from "../target/types/vault";
 import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
-import { BN } from "bn.js";
+import BN from "bn.js";
 import { expect } from "chai";
 
 describe("vault", () => {
@@ -74,7 +74,25 @@ describe("vault", () => {
     expect(after).to.equal(before - amount);
   });
 
-  // TODO: a withdraw of more than the vault holds should fail.
+  it("rejects a withdrawal larger than the balance", async () => {
+    const balance = await provider.connection.getBalance(vaultPda);
+
+    try {
+      await program.methods
+        .withdraw(new BN(balance + 1 * LAMPORTS_PER_SOL))
+        .accountsStrict({
+          user,
+          vault: vaultPda,
+          vaultState: vaultStatePda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      expect.fail("overdrawing the vault should fail");
+    } catch (err) {
+      // The System Program refuses to move more lamports than the vault holds.
+      expect(String(err)).to.match(/insufficient|custom program error/i);
+    }
+  });
 
   it("closes the vault and returns everything", async () => {
     const before = await provider.connection.getBalance(user);

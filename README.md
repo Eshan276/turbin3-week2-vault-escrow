@@ -71,17 +71,39 @@ from repricing an escrow.
 
 ```bash
 anchor build
-anchor test
+anchor test --validator legacy
 ```
 
 `anchor test` starts a local validator, deploys both programs, and runs the
-TypeScript suites in `tests/`.
+TypeScript suites in `tests/`. The `--validator legacy` flag selects
+`solana-test-validator`; Anchor 0.32 otherwise defaults to `surfpool`.
 
-For the Rust/LiteSVM tests:
+### Test coverage
 
-```bash
-cargo test
 ```
+escrow
+  make: moves token A into the vault and records the terms
+  update: the maker can change the asking price
+  update: anyone other than the maker is rejected
+  update: rejects a zero price
+  take: swaps both sides and closes the escrow
+  refund: returns the deposit and closes the escrow
+
+vault
+  initializes the vault and stores both bumps
+  deposits SOL into the vault
+  withdraws SOL from the vault
+  rejects a withdrawal larger than the balance
+  closes the vault and returns everything
+
+11 passing
+```
+
+## Notes
+
+The `Take` accounts struct boxes its token accounts. Six `InterfaceAccount`
+fields overflow the 4 KB BPF stack frame during `try_accounts`, so
+`Box<InterfaceAccount<..>>` moves them to the heap.
 
 ## Layout
 

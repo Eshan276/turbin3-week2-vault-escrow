@@ -17,8 +17,8 @@ pub struct Take<'info> {
     #[account(mut)]
     pub maker: SystemAccount<'info>,
 
-    pub mint_a: InterfaceAccount<'info, Mint>,
-    pub mint_b: InterfaceAccount<'info, Mint>,
+    pub mint_a: Box<InterfaceAccount<'info, Mint>>,
+    pub mint_b: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         init_if_needed,
@@ -27,7 +27,7 @@ pub struct Take<'info> {
         associated_token::authority = taker,
         associated_token::token_program = token_program
     )]
-    pub taker_ata_a: InterfaceAccount<'info, TokenAccount>,
+    pub taker_ata_a: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -35,7 +35,7 @@ pub struct Take<'info> {
         associated_token::authority = taker,
         associated_token::token_program = token_program
     )]
-    pub taker_ata_b: InterfaceAccount<'info, TokenAccount>,
+    pub taker_ata_b: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init_if_needed,
@@ -44,7 +44,7 @@ pub struct Take<'info> {
         associated_token::authority = maker,
         associated_token::token_program = token_program
     )]
-    pub maker_ata_b: InterfaceAccount<'info, TokenAccount>,
+    pub maker_ata_b: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -63,7 +63,7 @@ pub struct Take<'info> {
         associated_token::authority = escrow,
         associated_token::token_program = token_program
     )]
-    pub vault: InterfaceAccount<'info, TokenAccount>,
+    pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Interface<'info, TokenInterface>,
@@ -71,24 +71,61 @@ pub struct Take<'info> {
 }
 
 impl<'info> Take<'info> {
+    /// Taker pays the maker in mint_b.
     pub fn deposit(&mut self) -> Result<()> {
-        // TODO: taker pays the maker — transfer_checked taker_ata_b -> maker_ata_b
-        // for escrow.receive. The taker signs.
-        todo!("send the agreed amount of mint_b to the maker")
+        let cpi_accounts = TransferChecked {
+            from: self.taker_ata_b.to_account_info(),
+            mint: self.mint_b.to_account_info(),
+            to: self.maker_ata_b.to_account_info(),
+            authority: self.taker.to_account_info(),
+        };
+
+        // The taker owns the source ATA and signed the transaction.
+        let cpi_ctx = CpiContext::new(self.token_program.key(), cpi_accounts);
+
+        transfer_checked(cpi_ctx, self.escrow.receive, self.mint_b.decimals)
     }
 
+    /// Vault releases mint_a to the taker.
     pub fn release(&mut self) -> Result<()> {
-        // TODO: release the vault to the taker — transfer_checked vault -> taker_ata_a
-        // for the vault's full balance.
-        // Authority is the escrow PDA, so new_with_signer with seeds:
-        //   [ESCROW_SEED, maker.key().as_ref(), &escrow.seed.to_le_bytes(), &[escrow.bump]]
-        todo!("release vault tokens to the taker, escrow-PDA signed")
+        let maker = self.escrow.maker;
+        let seed_bytes = self.escrow.seed.to_le_bytes();
+        let bump = [self.escrow.bump];
+        let seeds = &[ESCROW_SEED, maker.as_ref(), &seed_bytes[..], &bump[..]];
+        let signer_seeds = &[&seeds[..]];
+
+        let cpi_accounts = TransferChecked {
+            from: self.vault.to_account_info(),
+            mint: self.mint_a.to_account_info(),
+            to: self.taker_ata_a.to_account_info(),
+            authority: self.escrow.to_account_info(),
+        };
+
+        // The vault ATA is owned by the escrow PDA, so the program signs
+        // with the escrow seeds.
+        let cpi_ctx =
+            CpiContext::new_with_signer(self.token_program.key(), cpi_accounts, signer_seeds);
+
+        transfer_checked(cpi_ctx, self.vault.amount, self.mint_a.decimals)
     }
 
+    /// Close the now-empty vault ATA and return its rent to the maker.
     pub fn close_vault(&mut self) -> Result<()> {
-        // TODO: close the now-empty vault ATA, rent back to the maker.
-        // Same escrow-PDA signer seeds as release().
-        // `close = maker` on the escrow account handles the escrow account itself.
-        todo!("close_account on the vault")
+        let maker = self.escrow.maker;
+        let seed_bytes = self.escrow.seed.to_le_bytes();
+        let bump = [self.escrow.bump];
+        let seeds = &[ESCROW_SEED, maker.as_ref(), &seed_bytes[..], &bump[..]];
+        let signer_seeds = &[&seeds[..]];
+
+        let cpi_accounts = CloseAccount {
+            account: self.vault.to_account_info(),
+            destination: self.maker.to_account_info(),
+            authority: self.escrow.to_account_info(),
+        };
+
+        let cpi_ctx =
+            CpiContext::new_with_signer(self.token_program.key(), cpi_accounts, signer_seeds);
+
+        close_account(cpi_ctx)
     }
 }

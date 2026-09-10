@@ -29,12 +29,28 @@ pub struct Close<'info> {
 
 impl<'info> Close<'info> {
     pub fn close(&mut self) -> Result<()> {
-        // TODO: drain the FULL vault balance back to the user, PDA-signed.
-        // `close = user` on vault_state handles the rent refund separately,
-        // and it runs after this body returns Ok.
-        //
-        // Order matters: the signing seeds depend on vault_state, so the vault
-        // must be drained before vault_state is closed.
-        todo!("transfer self.vault.lamports() from vault -> user")
+        let cpi_accounts = Transfer {
+            from: self.vault.to_account_info(),
+            to: self.user.to_account_info(),
+        };
+
+        let vault_state_key = self.vault_state.key();
+        let seeds = &[
+            b"vault",
+            vault_state_key.as_ref(),
+            &[self.vault_state.vault_bump],
+        ];
+        let signer_seeds = &[&seeds[..]];
+
+        let cpi_ctx = CpiContext::new_with_signer(
+            System::id(),
+            cpi_accounts,
+            signer_seeds,
+        );
+
+        // Drain the whole balance. This must happen before `close = user`
+        // tears down vault_state, because the signer seeds above depend on it.
+        // Anchor runs the close constraint after this body returns Ok.
+        transfer(cpi_ctx, self.vault.lamports())
     }
 }

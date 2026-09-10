@@ -26,9 +26,11 @@ pub struct Initialize<'info> {
 
 impl<'info> Initialize<'info> {
     pub fn initialize(&mut self, bumps: &InitializeBumps) -> Result<()> {
-        // TODO: cache both bumps into vault_state so later instructions can
-        // pass `bump = vault_state.vault_bump` instead of re-searching.
-        let _ = bumps;
-        todo!("save bumps.vault and bumps.vault_state into self.vault_state")
+        // Cache both bumps so later instructions can pass
+        // `bump = vault_state.vault_bump` instead of re-running the search.
+        self.vault_state.vault_bump = bumps.vault;
+        self.vault_state.state_bump = bumps.vault_state;
+
+        Ok(())
     }
 }

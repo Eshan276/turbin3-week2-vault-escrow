@@ -27,10 +27,15 @@ pub struct Deposit<'info> {
 
 impl<'info> Deposit<'info> {
     pub fn deposit(&mut self, amount: u64) -> Result<()> {
-        // TODO: CPI into the System Program to move `amount` from user -> vault.
+        let cpi_accounts = Transfer {
+            from: self.user.to_account_info(),
+            to: self.vault.to_account_info(),
+        };
+
         // The source is the user's own wallet and they signed the transaction,
-        // so plain CpiContext::new is enough here.
-        let _ = amount;
-        todo!("build a Transfer from user to vault, then call transfer()")
+        // so no PDA signer seeds are needed.
+        let cpi_ctx = CpiContext::new(System::id(), cpi_accounts);
+
+        transfer(cpi_ctx, amount)
     }
 }

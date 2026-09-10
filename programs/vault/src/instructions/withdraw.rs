@@ -27,11 +27,28 @@ pub struct Withdraw<'info> {
 
 impl<'info> Withdraw<'info> {
     pub fn withdraw(&mut self, amount: u64) -> Result<()> {
-        // TODO: CPI vault -> user for `amount`.
-        // The source is the vault PDA, which has no private key, so this needs
-        // CpiContext::new_with_signer with seeds:
-        //   [b"vault", vault_state.key().as_ref(), &[vault_state.vault_bump]]
-        let _ = amount;
-        todo!("transfer from the vault PDA using new_with_signer")
+        let cpi_accounts = Transfer {
+            from: self.vault.to_account_info(),
+            to: self.user.to_account_info(),
+        };
+
+        // The source is the vault PDA, which has no private key. We pass the
+        // seeds instead; the runtime re-derives the address and, on a match,
+        // grants it signer privilege for this CPI.
+        let vault_state_key = self.vault_state.key();
+        let seeds = &[
+            b"vault",
+            vault_state_key.as_ref(),
+            &[self.vault_state.vault_bump],
+        ];
+        let signer_seeds = &[&seeds[..]];
+
+        let cpi_ctx = CpiContext::new_with_signer(
+            System::id(),
+            cpi_accounts,
+            signer_seeds,
+        );
+
+        transfer(cpi_ctx, amount)
     }
 }

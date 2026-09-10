@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{Escrow, ESCROW_SEED};
+use crate::{Escrow, EscrowError, ESCROW_SEED};
 
 #[derive(Accounts)]
 pub struct Update<'info> {
@@ -19,9 +19,11 @@ pub struct Update<'info> {
 
 impl<'info> Update<'info> {
     pub fn update(&mut self, receive: u64) -> Result<()> {
-        // TODO: set the new asking price on self.escrow.
-        // Consider rejecting zero with EscrowError::InvalidAmount.
-        let _ = receive;
-        todo!("update escrow.receive")
+        require!(receive > 0, EscrowError::InvalidAmount);
+
+        // `has_one = maker` on the struct already rejects anyone else.
+        self.escrow.receive = receive;
+
+        Ok(())
     }
 }
