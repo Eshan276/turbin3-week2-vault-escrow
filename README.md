@@ -80,6 +80,8 @@ TypeScript suites in `tests/`. The `--validator legacy` flag selects
 
 ### Test coverage
 
+![All tests passing](docs/tests-passing.png)
+
 ```
 escrow
   make: moves token A into the vault and records the terms
